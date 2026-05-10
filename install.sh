@@ -70,13 +70,11 @@ config_after_install() {
         echo -e "Enter the ${yellow}panel path${plain} (leave blank for existing/default value):"
         read config_path
 
-        # Sub configuration
         echo -e "Enter the ${yellow}subscription port${plain} (leave blank for existing/default value):"
         read config_subPort
         echo -e "Enter the ${yellow}subscription path${plain} (leave blank for existing/default value):" 
         read config_subPath
 
-        # Set configs
         echo -e "${yellow}Initializing, please wait...${plain}"
         params=""
         [ -z "$config_port" ] || params="$params -port $config_port"
@@ -87,11 +85,8 @@ config_after_install() {
 
         read -p "Do you want to change admin credentials [y/n]? ": admin_confirm
         if [[ "${admin_confirm}" == "y" || "${admin_confirm}" == "Y" ]]; then
-            # First admin credentials
             read -p "Please set up your username:" config_account
             read -p "Please set up your password:" config_password
-
-            # Set credentials
             echo -e "${yellow}Initializing, please wait...${plain}"
             /usr/local/s-ui/sui admin -username ${config_account} -password ${config_password}
         else
@@ -135,23 +130,16 @@ install_s-ui() {
     cd /tmp/
 
     if [ $# == 0 ]; then
-        # 指向你的仓库进行版本获取
-        last_version=$(curl -Ls "https://api.github.com/repos/szhfans/s-ui/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-        if [[ ! -n "$last_version" ]]; then
-            echo -e "${red}Failed to fetch s-ui version, it maybe due to Github API restrictions, please try it later${plain}"
-            exit 1
-        fi
+        last_version="v1.3.11"
         echo -e "Got s-ui latest version: ${last_version}, beginning the installation..."
-        # 指向你的仓库下载二进制文件
-        wget -N --no-check-certificate -O /tmp/s-ui-linux-$(arch).tar.gz https://github.com/szhfans/s-ui/releases/download/${last_version}/s-ui-linux-$(arch).tar.gz
+        wget -N --no-check-certificate -O /tmp/s-ui-linux-$(arch).tar.gz https://github.com/alireza0/s-ui/releases/download/${last_version}/s-ui-linux-$(arch).tar.gz
         if [[ $? -ne 0 ]]; then
             echo -e "${red}Downloading s-ui failed, please be sure that your server can access Github ${plain}"
             exit 1
         fi
     else
         last_version=$1
-        # 指向你的仓库下载指定版本
-        url="https://github.com/szhfans/s-ui/releases/download/${last_version}/s-ui-linux-$(arch).tar.gz"
+        url="https://github.com/alireza0/s-ui/releases/download/${last_version}/s-ui-linux-$(arch).tar.gz"
         echo -e "Beginning the install s-ui v$1"
         wget -N --no-check-certificate -O /tmp/s-ui-linux-$(arch).tar.gz ${url}
         if [[ $? -ne 0 ]]; then
