@@ -124,6 +124,37 @@ prepare_services() {
     systemctl daemon-reload
 }
 
+install_singbox() {
+    echo -e "${yellow}Installing latest sing-box core...${plain}"
+
+    SB_VERSION=$(curl -Ls "https://api.github.com/repos/SagerNet/sing-box/releases/latest" \
+        | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+
+    if [[ -z "$SB_VERSION" ]]; then
+        echo -e "${red}Failed to fetch sing-box version, skipping...${plain}"
+        return
+    fi
+
+    echo -e "Got sing-box version: ${SB_VERSION}"
+
+    wget -N --no-check-certificate \
+        -O /tmp/sing-box.tar.gz \
+        "https://github.com/SagerNet/sing-box/releases/download/v${SB_VERSION}/sing-box-${SB_VERSION}-linux-$(get_arch).tar.gz"
+
+    if [[ $? -ne 0 ]]; then
+        echo -e "${red}sing-box download failed, skipping...${plain}"
+        return
+    fi
+
+    mkdir -p /usr/local/s-ui/bin
+    tar -xzf /tmp/sing-box.tar.gz -C /tmp/
+    cp /tmp/sing-box-${SB_VERSION}-linux-$(get_arch)/sing-box /usr/local/s-ui/bin/sing-box
+    chmod +x /usr/local/s-ui/bin/sing-box
+    rm -rf /tmp/sing-box.tar.gz /tmp/sing-box-${SB_VERSION}-linux-$(get_arch)
+
+    echo -e "${green}sing-box v${SB_VERSION} installed!${plain}"
+}
+
 install_s-ui() {
     cd /tmp/
 
@@ -170,6 +201,7 @@ install_s-ui() {
 
     config_after_install
     prepare_services
+    install_singbox
 
     systemctl enable s-ui --now
 
@@ -181,6 +213,6 @@ install_s-ui() {
 }
 
 echo -e "${green}Executing...${plain}"
-install_base
 unset VERSION
+install_base
 install_s-ui $1
