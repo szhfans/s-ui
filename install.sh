@@ -41,19 +41,19 @@ echo "arch: $(arch)"
 install_base() {
     case "${release}" in
     centos | almalinux | rocky | oracle)
-        yum -y update && yum install -y -q wget curl tar tzdata
+        yum -y update && yum install -y -q wget curl tar tzdata git
         ;;
     fedora)
-        dnf -y update && dnf install -y -q wget curl tar tzdata
+        dnf -y update && dnf install -y -q wget curl tar tzdata git
         ;;
     arch | manjaro | parch)
-        pacman -Syu && pacman -Syu --noconfirm wget curl tar tzdata
+        pacman -Syu --noconfirm wget curl tar tzdata git
         ;;
     opensuse-tumbleweed)
-        zypper refresh && zypper -q install -y wget curl tar timezone
+        zypper refresh && zypper -q install -y wget curl tar timezone git
         ;;
     *)
-        apt-get update && apt-get install -y -q wget curl tar tzdata
+        apt-get update && apt-get install -y -q wget curl tar tzdata git
         ;;
     esac
 }
@@ -132,50 +132,29 @@ prepare_services() {
 }
 
 install_s-ui() {
-    cd /tmp/
+    # 安装或更新 s-ui
+    INSTALL_DIR="/usr/local/s-ui"
+    REPO="https://github.com/szhfans/s-ui.git"
 
-    if [ $# == 0 ]; then
-        last_version=$(curl -Ls "https://api.github.com/repos/alireza0/s-ui/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-        if [[ ! -n "$last_version" ]]; then
-            echo -e "${red}Failed to fetch s-ui version, it maybe due to Github API restrictions, please try it later${plain}"
-            exit 1
-        fi
-        echo -e "Got s-ui latest version: ${last_version}, beginning the installation..."
-        wget -N --no-check-certificate -O /tmp/s-ui-linux-$(arch).tar.gz https://github.com/alireza0/s-ui/releases/download/${last_version}/s-ui-linux-$(arch).tar.gz
-        if [[ $? -ne 0 ]]; then
-            echo -e "${red}Downloading s-ui failed, please be sure that your server can access Github ${plain}"
-            exit 1
-        fi
+    if [ ! -d "$INSTALL_DIR" ]; then
+        echo -e "${green}Cloning s-ui repository...${plain}"
+        git clone $REPO $INSTALL_DIR
     else
-        last_version=$1
-        url="https://github.com/alireza0/s-ui/releases/download/${last_version}/s-ui-linux-$(arch).tar.gz"
-        echo -e "Beginning the install s-ui v$1"
-        wget -N --no-check-certificate -O /tmp/s-ui-linux-$(arch).tar.gz ${url}
-        if [[ $? -ne 0 ]]; then
-            echo -e "${red}download s-ui v$1 failed,please check the version exists${plain}"
-            exit 1
-        fi
+        echo -e "${green}Updating existing s-ui installation...${plain}"
+        cd $INSTALL_DIR || exit
+        git fetch --all
+        git reset --hard origin/main
     fi
 
-    if [[ -e /usr/local/s-ui/ ]]; then
-        systemctl stop s-ui
-    fi
-
-    tar zxvf s-ui-linux-$(arch).tar.gz
-    rm s-ui-linux-$(arch).tar.gz -f
-
-    chmod +x s-ui/sui s-ui/s-ui.sh
-    cp s-ui/s-ui.sh /usr/bin/s-ui
-    cp -rf s-ui /usr/local/
-    cp -f s-ui/*.service /etc/systemd/system/
-    rm -rf s-ui
+    chmod +x $INSTALL_DIR/sui $INSTALL_DIR/s-ui.sh
+    cp $INSTALL_DIR/s-ui.sh /usr/bin/s-ui
 
     config_after_install
     prepare_services
 
     systemctl enable s-ui --now
 
-    echo -e "${green}s-ui v${last_version}${plain} installation finished, it is up and running now..."
+    echo -e "${green}s-ui installation/upgrade finished!${plain}"
     echo -e "You may access the Panel with following URL(s):${green}"
     /usr/local/s-ui/sui uri
     echo -e "${plain}"
