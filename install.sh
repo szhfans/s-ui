@@ -129,8 +129,8 @@ install_s-ui() {
 
     if [[ -n "$1" ]]; then
         last_version="$1"
-    elif [[ -n "$VERSION" ]]; then
-        last_version="$VERSION"
+    elif [[ -n "$SUI_VERSION" ]]; then
+        last_version="$SUI_VERSION"
     else
         last_version=$(curl -Ls "https://api.github.com/repos/szhfans/s-ui/releases/latest" \
             | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
@@ -182,4 +182,5 @@ install_s-ui() {
 
 echo -e "${green}Executing...${plain}"
 install_base
+unset VERSION
 install_s-ui $1
