@@ -23,7 +23,7 @@ else
 fi
 echo "The OS release is: $release"
 
-arch() {
+get_arch() {
     case "$(uname -m)" in
     x86_64 | x64 | amd64) echo 'amd64' ;;
     i*86 | x86) echo '386' ;;
@@ -32,11 +32,11 @@ arch() {
     armv6* | armv6) echo 'armv6' ;;
     armv5* | armv5) echo 'armv5' ;;
     s390x) echo 's390x' ;;
-    *) echo -e "${green}Unsupported CPU architecture! ${plain}" && rm -f install.sh && exit 1 ;;
+    *) echo -e "${green}Unsupported CPU architecture! ${plain}" && exit 1 ;;
     esac
 }
 
-echo "arch: $(arch)"
+echo "arch: $(get_arch)"
 
 install_base() {
     case "${release}" in
@@ -148,8 +148,8 @@ install_s-ui() {
     echo -e "Got s-ui version: ${last_version}, beginning the installation..."
 
     wget -N --no-check-certificate \
-        -O /tmp/s-ui-linux-$(arch).tar.gz \
-        "https://github.com/szhfans/s-ui/releases/download/${last_version}/s-ui-linux-$(arch).tar.gz"
+        -O /tmp/s-ui-linux-$(get_arch).tar.gz \
+        "https://github.com/szhfans/s-ui/releases/download/${last_version}/s-ui-linux-$(get_arch).tar.gz"
 
     if [[ $? -ne 0 ]]; then
         echo -e "${red}Download failed! Please check that release tag '${last_version}' exists at:${plain}"
@@ -161,8 +161,8 @@ install_s-ui() {
         systemctl stop s-ui 2>/dev/null
     fi
 
-    tar zxvf /tmp/s-ui-linux-$(arch).tar.gz -C /tmp/
-    rm -f /tmp/s-ui-linux-$(arch).tar.gz
+    tar zxvf /tmp/s-ui-linux-$(get_arch).tar.gz -C /tmp/
+    rm -f /tmp/s-ui-linux-$(get_arch).tar.gz
 
     chmod +x /tmp/s-ui/sui /tmp/s-ui/s-ui.sh
     cp /tmp/s-ui/s-ui.sh /usr/bin/s-ui
