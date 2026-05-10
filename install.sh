@@ -12,11 +12,9 @@ cur_dir=$(pwd)
 
 # Check OS and set release variable
 if [[ -f /etc/os-release ]]; then
-    source /etc/os-release
-    release=$ID
+    release=$(grep "^ID=" /etc/os-release | cut -d= -f2 | tr -d '"')
 elif [[ -f /usr/lib/os-release ]]; then
-    source /usr/lib/os-release
-    release=$ID
+    release=$(grep "^ID=" /usr/lib/os-release | cut -d= -f2 | tr -d '"')
 else
     echo "Failed to check the system OS, please contact the author!" >&2
     exit 1
