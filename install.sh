@@ -70,11 +70,13 @@ config_after_install() {
         echo -e "Enter the ${yellow}panel path${plain} (leave blank for existing/default value):"
         read config_path
 
+        # Sub configuration
         echo -e "Enter the ${yellow}subscription port${plain} (leave blank for existing/default value):"
         read config_subPort
         echo -e "Enter the ${yellow}subscription path${plain} (leave blank for existing/default value):" 
         read config_subPath
 
+        # Set configs
         echo -e "${yellow}Initializing, please wait...${plain}"
         params=""
         [ -z "$config_port" ] || params="$params -port $config_port"
@@ -85,8 +87,11 @@ config_after_install() {
 
         read -p "Do you want to change admin credentials [y/n]? ": admin_confirm
         if [[ "${admin_confirm}" == "y" || "${admin_confirm}" == "Y" ]]; then
+            # First admin credentials
             read -p "Please set up your username:" config_account
             read -p "Please set up your password:" config_password
+
+            # Set credentials
             echo -e "${yellow}Initializing, please wait...${plain}"
             /usr/local/s-ui/sui admin -username ${config_account} -password ${config_password}
         else
@@ -129,23 +134,33 @@ prepare_services() {
 install_s-ui() {
     cd /tmp/
 
-    if [ $# == 0 ]; then
-        last_version="v1.3.11"
-        echo -e "Got s-ui latest version: ${last_version}, beginning the installation..."
-        wget -N --no-check-certificate -O /tmp/s-ui-linux-$(arch).tar.gz https://github.com/alireza0/s-ui/releases/download/${last_version}/s-ui-linux-$(arch).tar.gz
-        if [[ $? -ne 0 ]]; then
-            echo -e "${red}Downloading s-ui failed, please be sure that your server can access Github ${plain}"
-            exit 1
-        fi
-    else
+    # 1. 判断是否传入了参数 (例如直接跟在脚本后面的 1.4.1)
+    if [[ -n "$1" ]]; then
         last_version=$1
-        url="https://github.com/alireza0/s-ui/releases/download/${last_version}/s-ui-linux-$(arch).tar.gz"
-        echo -e "Beginning the install s-ui v$1"
-        wget -N --no-check-certificate -O /tmp/s-ui-linux-$(arch).tar.gz ${url}
-        if [[ $? -ne 0 ]]; then
-            echo -e "${red}download s-ui v$1 failed,please check the version exists${plain}"
-            exit 1
+    # 2. 判断是否设置了环境变量 (例如 VERSION=1.4.1 bash ...)
+    elif [[ -n "$VERSION" ]]; then
+        last_version=$VERSION
+    # 3. 如果都没有，尝试通过 GitHub API 自动获取最新版本
+    else
+        last_version=$(curl -Ls "https://api.github.com/repos/szhfans/s-ui/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        
+        # 4. 如果 API 获取失败（触发防刷限制），直接回退到硬编码的安全版本
+        if [[ -z "$last_version" ]]; then
+            echo -e "${yellow}GitHub API restriction detected. Falling back to default version v1.4.1...${plain}"
+            last_version="v1.4.1" # 如果你仓库的 tag 是 1.4.1，请把这里的 v 去掉
         fi
+    fi
+
+    echo -e "Got s-ui version: ${last_version}, beginning the installation..."
+    
+    # 组合下载链接，指向你自己的仓库
+    url="https://github.com/szhfans/s-ui/releases/download/${last_version}/s-ui-linux-$(arch).tar.gz"
+    
+    wget -N --no-check-certificate -O /tmp/s-ui-linux-$(arch).tar.gz ${url}
+    
+    if [[ $? -ne 0 ]]; then
+        echo -e "${red}Download failed! Please ensure the release tag '${last_version}' exists in https://github.com/szhfans/s-ui/releases ${plain}"
+        exit 1
     fi
 
     if [[ -e /usr/local/s-ui/ ]]; then
