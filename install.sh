@@ -70,13 +70,11 @@ config_after_install() {
         echo -e "Enter the ${yellow}panel path${plain} (leave blank for existing/default value):"
         read config_path
 
-        # Sub configuration
         echo -e "Enter the ${yellow}subscription port${plain} (leave blank for existing/default value):"
         read config_subPort
         echo -e "Enter the ${yellow}subscription path${plain} (leave blank for existing/default value):" 
         read config_subPath
 
-        # Set configs
         echo -e "${yellow}Initializing, please wait...${plain}"
         params=""
         [ -z "$config_port" ] || params="$params -port $config_port"
@@ -87,11 +85,8 @@ config_after_install() {
 
         read -p "Do you want to change admin credentials [y/n]? ": admin_confirm
         if [[ "${admin_confirm}" == "y" || "${admin_confirm}" == "Y" ]]; then
-            # First admin credentials
             read -p "Please set up your username:" config_account
             read -p "Please set up your password:" config_password
-
-            # Set credentials
             echo -e "${yellow}Initializing, please wait...${plain}"
             /usr/local/s-ui/sui admin -username ${config_account} -password ${config_password}
         else
@@ -134,58 +129,56 @@ prepare_services() {
 install_s-ui() {
     cd /tmp/
 
-    # 1. 判断是否传入了参数 (例如直接跟在脚本后面的 1.4.1)
     if [[ -n "$1" ]]; then
-        last_version=$1
-    # 2. 判断是否设置了环境变量 (例如 VERSION=1.4.1 bash ...)
+        last_version="$1"
     elif [[ -n "$VERSION" ]]; then
-        last_version=$VERSION
-    # 3. 如果都没有，尝试通过 GitHub API 自动获取最新版本
+        last_version="$VERSION"
     else
-        last_version=$(curl -Ls "https://api.github.com/repos/szhfans/s-ui/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-        
-        # 4. 如果 API 获取失败（触发防刷限制），直接回退到硬编码的安全版本
+        last_version=$(curl -Ls "https://api.github.com/repos/szhfans/s-ui/releases/latest" \
+            | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
         if [[ -z "$last_version" ]]; then
-            echo -e "${yellow}GitHub API restriction detected. Falling back to default version v1.4.1...${plain}"
-            last_version="v1.4.1" # 如果你仓库的 tag 是 1.4.1，请把这里的 v 去掉
+            echo -e "${yellow}GitHub API restriction detected. Falling back to v1.4.1...${plain}"
+            last_version="v1.4.1"
         fi
     fi
 
+    # 确保版本号带 v 前缀
+    [[ "$last_version" != v* ]] && last_version="v${last_version}"
+
     echo -e "Got s-ui version: ${last_version}, beginning the installation..."
-    
-    # 组合下载链接，指向你自己的仓库
-    url="https://github.com/szhfans/s-ui/releases/download/${last_version}/s-ui-linux-$(arch).tar.gz"
-    
-    wget -N --no-check-certificate -O /tmp/s-ui-linux-$(arch).tar.gz ${url}
-    
+
+    wget -N --no-check-certificate \
+        -O /tmp/s-ui-linux-$(arch).tar.gz \
+        "https://github.com/szhfans/s-ui/releases/download/${last_version}/s-ui-linux-$(arch).tar.gz"
+
     if [[ $? -ne 0 ]]; then
-        echo -e "${red}Download failed! Please ensure the release tag '${last_version}' exists in https://github.com/szhfans/s-ui/releases ${plain}"
+        echo -e "${red}Download failed! Please check that release tag '${last_version}' exists at:${plain}"
+        echo -e "https://github.com/szhfans/s-ui/releases"
         exit 1
     fi
 
     if [[ -e /usr/local/s-ui/ ]]; then
-        systemctl stop s-ui
+        systemctl stop s-ui 2>/dev/null
     fi
 
-    tar zxvf s-ui-linux-$(arch).tar.gz
-    rm s-ui-linux-$(arch).tar.gz -f
+    tar zxvf /tmp/s-ui-linux-$(arch).tar.gz -C /tmp/
+    rm -f /tmp/s-ui-linux-$(arch).tar.gz
 
-    chmod +x s-ui/sui s-ui/s-ui.sh
-    cp s-ui/s-ui.sh /usr/bin/s-ui
-    cp -rf s-ui /usr/local/
-    cp -f s-ui/*.service /etc/systemd/system/
-    rm -rf s-ui
+    chmod +x /tmp/s-ui/sui /tmp/s-ui/s-ui.sh
+    cp /tmp/s-ui/s-ui.sh /usr/bin/s-ui
+    cp -rf /tmp/s-ui /usr/local/
+    cp -f /tmp/s-ui/*.service /etc/systemd/system/
+    rm -rf /tmp/s-ui
 
     config_after_install
     prepare_services
 
     systemctl enable s-ui --now
 
-    echo -e "${green}s-ui v${last_version}${plain} installation finished, it is up and running now..."
+    echo -e "${green}s-ui ${last_version}${plain} installation finished, it is up and running now..."
     echo -e "You may access the Panel with following URL(s):${green}"
     /usr/local/s-ui/sui uri
     echo -e "${plain}"
-    echo -e ""
     s-ui help
 }
 
