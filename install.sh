@@ -18,111 +18,83 @@ arch() {
     case "$(uname -m)" in
     x86_64 | x64 | amd64) echo 'amd64' ;;
     armv8* | armv8 | arm64 | aarch64) echo 'arm64' ;;
+    armv5* | armv5) echo 'armv5' ;;
+    armv6* | armv6) echo 'armv6' ;;
+    armv7* | armv7) echo 'armv7' ;;
+    s390x) echo 's390x' ;;
     *) echo 'amd64' ;;
     esac
 }
 
 install_base() {
-    apt-get update && apt-get install -y wget curl tar tzdata git make gcc
-
-    # 安装 Go
-    if ! command -v go &> /dev/null; then
-        echo -e "${yellow}正在安装 Go...${plain}"
-        GO_VERSION="1.21.5"
-        wget -q https://golang.google.cn/dl/go${GO_VERSION}.linux-$(arch).tar.gz
-        rm -rf /usr/local/go
-        tar -C /usr/local -xzf go${GO_VERSION}.linux-$(arch).tar.gz
-        ln -sf /usr/local/go/bin/go /usr/local/bin/go
-        rm -f go${GO_VERSION}.linux-$(arch).tar.gz
-    fi
-
-    # 安装 Node.js（编译前端必须）
-    if ! command -v node &> /dev/null; then
-        echo -e "${yellow}正在安装 Node.js...${plain}"
-        curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-        apt-get install -y nodejs
-    fi
+    case "${release}" in
+    centos | almalinux | rocky | oracle)
+        yum -y update && yum install -y wget curl tar tzdata
+        ;;
+    fedora)
+        dnf -y update && dnf install -y wget curl tar tzdata
+        ;;
+    *)
+        apt-get update && apt-get install -y wget curl tar tzdata
+        ;;
+    esac
 }
 
-build_and_install() {
-    INSTALL_DIR="/usr/local/s-ui"
-    BUILD_DIR="/tmp/s-ui-build"
-    REPO="https://github.com/szhfans/s-ui.git"
+install_s-ui() {
+    # 从原作者 alireza0 的 releases 获取最新版本号
+    last_version=$(curl -Ls "https://api.github.com/repos/alireza0/s-ui/releases/latest" \
+        | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
 
-    # 克隆源码
-    rm -rf $BUILD_DIR
-    echo -e "${yellow}正在克隆仓库...${plain}"
-    git clone $REPO $BUILD_DIR
-    cd $BUILD_DIR
+    if [[ -z "$last_version" ]]; then
+        # API 限速时回退到固定版本
+        last_version="v1.4.1"
+        echo -e "${yellow}无法获取最新版本，使用 ${last_version}${plain}"
+    fi
 
-    # 初始化子模块（关键步骤，原脚本缺失）
-    git submodule update --init --recursive
+    echo -e "${green}正在安装 s-ui ${last_version}${plain}"
 
-    # 编译前端（关键步骤，原脚本缺失）
-    echo -e "${yellow}正在编译前端...${plain}"
-    cd frontend
-    npm install
-    npm run build
-    cd ..
+    wget -N --no-check-certificate \
+        -O /tmp/s-ui-linux-$(arch).tar.gz \
+        "https://github.com/alireza0/s-ui/releases/download/${last_version}/s-ui-linux-$(arch).tar.gz"
 
-    # 把前端产物放到正确位置
-    rm -rf web/html/*
-    cp -R frontend/dist/ web/html/
-
-    # 编译后端
-    echo -e "${yellow}正在编译后端...${plain}"
-    go build -o sui main.go
-
-    if [ ! -f "sui" ]; then
-        echo -e "${red}编译失败，请检查源码${plain}"
+    if [[ $? -ne 0 ]]; then
+        echo -e "${red}下载失败，请检查网络或 GitHub 访问${plain}"
         exit 1
     fi
 
-    # 部署
-    mkdir -p $INSTALL_DIR
-    cp sui $INSTALL_DIR/sui
-    cp -r web $INSTALL_DIR/
-    chmod +x $INSTALL_DIR/sui
+    systemctl stop s-ui 2>/dev/null
+    rm -rf /usr/local/s-ui
+    mkdir -p /usr/local/s-ui
+    tar -xzf /tmp/s-ui-linux-$(arch).tar.gz -C /usr/local/s-ui/
+    rm -f /tmp/s-ui-linux-$(arch).tar.gz
+    chmod +x /usr/local/s-ui/sui
 
-    # 创建管理脚本软链
-    [ -f "$BUILD_DIR/s-ui.sh" ] && cp $BUILD_DIR/s-ui.sh $INSTALL_DIR/ && chmod +x $INSTALL_DIR/s-ui.sh && ln -sf $INSTALL_DIR/s-ui.sh /usr/bin/s-ui
-}
+    # 创建管理脚本
+    wget -N --no-check-certificate \
+        -O /usr/local/s-ui/s-ui.sh \
+        "https://raw.githubusercontent.com/alireza0/s-ui/main/s-ui.sh"
+    chmod +x /usr/local/s-ui/s-ui.sh
+    ln -sf /usr/local/s-ui/s-ui.sh /usr/bin/s-ui
 
-setup_service() {
-    cat > /etc/systemd/system/s-ui.service <<EOF
-[Unit]
-Description=s-ui service
-After=network.target
+    # 复制 service 文件
+    wget -N --no-check-certificate \
+        -O /etc/systemd/system/s-ui.service \
+        "https://raw.githubusercontent.com/alireza0/s-ui/main/s-ui.service"
+    wget -N --no-check-certificate \
+        -O /etc/systemd/system/sing-box.service \
+        "https://raw.githubusercontent.com/alireza0/s-ui/main/sing-box.service"
 
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/usr/local/s-ui/
-ExecStart=/usr/local/s-ui/sui
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-EOF
     systemctl daemon-reload
     systemctl enable s-ui --now
-}
 
-config_after_install() {
     /usr/local/s-ui/sui migrate
 
-    read -p "Do you want to change admin credentials [y/n]? :" confirm
-    if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
-        read -p "Please set up your username:" username
-        read -p "Please set up your password:" password
-        /usr/local/s-ui/sui admin -username $username -password $password
-    fi
+    echo -e "${green}s-ui ${last_version} 安装完成！${plain}"
+    echo ""
+    echo -e "默认面板地址: ${green}http://你的IP:2095/app/${plain}"
+    echo -e "默认用户名: ${green}admin${plain}"
+    echo -e "默认密码: ${green}admin${plain}"
 }
 
-echo -e "${green}开始安装 s-ui...${plain}"
 install_base
-build_and_install
-setup_service
-config_after_install
-
-echo -e "${green}安装完成！${plain}"
+install_s-ui
