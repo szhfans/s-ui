@@ -20,7 +20,7 @@ on:
 
 env:
   NODE_VERSION: "25"
-  CRONET_GO_VERSION: "2fef65f9dba90ddb89a87d00a6eb6165487c10c1"
+  CRONET_GO_VERSION: "98d539ce67568fb911654e66a14cf4247ed833ec"
   CRONET_GO_REPO: https://github.com/sagernet/cronet-go.git
   BOOTLIN_BASE_URL: https://toolchains.bootlin.com/downloads/releases/toolchains
 
@@ -64,7 +64,7 @@ jobs:
           - { platform: amd64, arch: amd64, bootlin: x86-64, naive: true }
           - { platform: arm64, arch: arm64, bootlin: aarch64, naive: true }
           - { platform: armv7, arch: arm, goarm: "7", bootlin: armv7-eabihf, naive: true }
-          - { platform: armv6, arch: arm, goarm: "6", bootlin: armv6-eabihf, naive: true }
+          - { platform: armv6, arch: arm, goarm: "6", bootlin: armv6-eabihf, naive: false }
           - { platform: armv5, arch: arm, goarm: "5", bootlin: armv5-eabi, naive: false }
           - { platform: "386", arch: "386", bootlin: x86-i686, naive: true }
           - { platform: s390x, arch: s390x, bootlin: s390x-z13, naive: false }
@@ -163,6 +163,21 @@ jobs:
             echo "CGO_CFLAGS=--sysroot=$SYSROOT" >> $GITHUB_ENV
             echo "CGO_LDFLAGS=--sysroot=$SYSROOT -static" >> $GITHUB_ENV
           fi
+
+      - name: Download Go modules (with retry)
+        run: |
+          set -e
+          export GODEBUG=http2client=0
+          for i in 1 2 3 4 5; do
+            if go mod download -x; then
+              echo "go mod download succeeded"
+              exit 0
+            fi
+            echo "go mod download failed (attempt $i), retrying in $((i * 10))s..."
+            sleep $((i * 10))
+          done
+          echo "go mod download failed after 5 attempts" >&2
+          exit 1
 
       - name: Build s-ui
         run: |

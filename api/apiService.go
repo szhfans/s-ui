@@ -197,7 +197,9 @@ func (a *ApiService) GetStats(c *gin.Context) {
 	if err != nil {
 		limit = 100
 	}
-	data, err := a.StatsService.GetStats(resource, tag, limit)
+	start, _ := strconv.ParseInt(c.Query("start"), 10, 64)
+	end, _ := strconv.ParseInt(c.Query("end"), 10, 64)
+	data, err := a.StatsService.GetStats(resource, tag, limit, start, end)
 	if err != nil {
 		jsonMsg(c, "", err)
 		return
@@ -322,6 +324,15 @@ func (a *ApiService) RestartApp(c *gin.Context) {
 func (a *ApiService) RestartSb(c *gin.Context) {
 	err := a.ConfigService.RestartCore()
 	jsonMsg(c, "restartSb", err)
+}
+
+func (a *ApiService) ResetTraffic(c *gin.Context) {
+	if err := a.ClientService.ResetAllClientsTraffic(); err != nil {
+		jsonMsg(c, "resetTraffic", err)
+		return
+	}
+	err := a.ConfigService.RestartCore()
+	jsonMsg(c, "resetTraffic", err)
 }
 
 func (a *ApiService) LinkConvert(c *gin.Context) {

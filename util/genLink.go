@@ -18,7 +18,14 @@ type LinkParam struct {
 	Value string
 }
 
-func LinkGenerator(clientConfig json.RawMessage, i *model.Inbound, hostname string) []string {
+func joinRemark(clientRemark, inboundRemark string) string {
+	if clientRemark != "" {
+		return clientRemark + "-" + inboundRemark
+	}
+	return inboundRemark
+}
+
+func LinkGenerator(clientConfig json.RawMessage, i *model.Inbound, hostname string, clientRemark string) []string {
 	inbound, err := i.MarshalFull()
 	if err != nil {
 		return []string{}
@@ -42,7 +49,7 @@ func LinkGenerator(clientConfig json.RawMessage, i *model.Inbound, hostname stri
 		Addrs = append(Addrs, map[string]interface{}{
 			"server":      hostname,
 			"server_port": (*inbound)["listen_port"],
-			"remark":      i.Tag,
+			"remark":      joinRemark(clientRemark, i.Tag),
 		})
 		if i.TlsId > 0 {
 			Addrs[0]["tls"] = tls
@@ -50,7 +57,7 @@ func LinkGenerator(clientConfig json.RawMessage, i *model.Inbound, hostname stri
 	} else {
 		for index, addr := range Addrs {
 			addrRemark, _ := addr["remark"].(string)
-			Addrs[index]["remark"] = i.Tag + addrRemark
+			Addrs[index]["remark"] = joinRemark(clientRemark, i.Tag+addrRemark)
 			if i.TlsId > 0 {
 				newTls := map[string]interface{}{}
 				for k, v := range tls {
@@ -353,6 +360,12 @@ func tuicLink(
 	baseUri := fmt.Sprintf("%s%s:%s@", "tuic://", uuid, password)
 	var links []string
 
+	// udp_relay_mode is a client-side (outbound) param and lives in out_json
+	var outJson map[string]interface{}
+	if raw, ok := inbound["out_json"].(json.RawMessage); ok {
+		_ = json.Unmarshal(raw, &outJson)
+	}
+
 	for _, addr := range addrs {
 		var params []LinkParam
 		if tls, ok := addr["tls"].(map[string]interface{}); ok {
@@ -360,6 +373,9 @@ func tuicLink(
 		}
 		if congestionControl, ok := inbound["congestion_control"].(string); ok {
 			params = append(params, LinkParam{"congestion_control", congestionControl})
+		}
+		if udpRelayMode, ok := outJson["udp_relay_mode"].(string); ok && udpRelayMode != "" {
+			params = append(params, LinkParam{"udp_relay_mode", udpRelayMode})
 		}
 
 		port, _ := addr["server_port"].(float64)
@@ -377,6 +393,10 @@ func vlessLink(
 
 	uuid, _ := userConfig["uuid"].(string)
 	baseParams := getTransportParams(inbound["transport"])
+	isTcp := false
+	if len(baseParams) == 1 && baseParams[0].Value == "tcp" {
+		isTcp = true
+	}
 	var links []string
 
 	for _, addr := range addrs {
@@ -384,7 +404,7 @@ func vlessLink(
 		copy(params, baseParams)
 		if tls, ok := addr["tls"].(map[string]interface{}); ok && tls["enabled"].(bool) {
 			getTlsParams(&params, tls, "allowInsecure")
-			if flow, ok := userConfig["flow"].(string); ok {
+			if flow, ok := userConfig["flow"].(string); ok && isTcp {
 				params = append(params, LinkParam{"flow", flow})
 			}
 		}
@@ -592,6 +612,11 @@ func getTlsParams(params *[]LinkParam, tls map[string]interface{}, insecureKey s
 		*params = append(*params, LinkParam{"security", "tls"})
 		if insecure, ok := tls["insecure"].(bool); ok && insecure {
 			*params = append(*params, LinkParam{insecureKey, "1"})
+		}
+		if pins, ok := tls["certificate_public_key_sha256"].([]interface{}); ok && len(pins) > 0 {
+			if pin, ok := pins[0].(string); ok && pin != "" {
+				*params = append(*params, LinkParam{"pinSHA256", pin})
+			}
 		}
 		if disableSni, ok := tls["disable_sni"].(bool); ok && disableSni {
 			*params = append(*params, LinkParam{"disable_sni", "1"})
